@@ -1,0 +1,15 @@
+.DS_Store
+*.pyc
+*__pycache__
+.idea*
+.vscode/
+
+config.json
+secrets.json
+app/insumos/*
+app/resultados/*
+documentacion/*
+
+Informacion.txt
+
+
