@@ -5,10 +5,10 @@
 .vscode/
 
 config.json
-secrets.json
 app/insumos/*
 app/resultados/*
 documentacion/*
+rta/*
 
 Informacion.txt
 

@@ -18,20 +18,41 @@ class ProcesamientoArchivos(BaseModel):
 
 
     def consolidado_ventas_pagos(self):
-        df_mp_reducido = self.df_mp[['ORDER_ID', 'cobro_por_descuento', 'comision_por_venta', 'ica', 'fuente', 'iva', 'TAXES_AMOUNT']]
+        df_mp_reducido = self.df_mp[['DESCRIPTION','ORDER_ID', 'cobro_por_descuento', 'comision_por_venta', 'ica', 'fuente', 'iva']]
+
+        lista_mp_no_payment = df_mp_reducido[~df_mp_reducido['DESCRIPTION'].isin(['payout', 'payment'])]['ORDER_ID'].unique().tolist()
+        df_mp_no_payment = df_mp_reducido[(df_mp_reducido['ORDER_ID'].isin(lista_mp_no_payment)) & (df_mp_reducido['DESCRIPTION']=='payment')]
+
+        df_mp_reducido = df_mp_reducido[df_mp_reducido['DESCRIPTION']=='payment']
+
+
+        df_mp_reducido = df_mp_reducido.drop('DESCRIPTION', axis=1)
+        df_mp_reducido = df_mp_reducido.groupby('ORDER_ID', as_index=False)[['cobro_por_descuento', 'comision_por_venta', 'ica', 'fuente', 'iva']].sum()
+
         df_concantenado = pd.merge(self.df_ml, df_mp_reducido, how='right', on='ORDER_ID')
         df_concantenado = df_concantenado[df_concantenado['ORDER_ID']!='']
 
         df_et_reducido = self.df_et[['ORDER_ID', 'fve', 'valor']]
-        df_consolidado = pd.merge(df_concantenado, df_et_reducido, how='left', on='ORDER_ID')
-        df_consolidado = df_consolidado[(df_consolidado['CC']!='') & (~df_consolidado['CC'].isnull())]
 
+        df_consolidado = pd.merge(df_concantenado, df_et_reducido, how='left', on='ORDER_ID')
         df_consolidado = df_consolidado.drop_duplicates(subset=['ORDER_ID'])
+
+        ordenes_no_mp_en_ml = df_consolidado[(df_consolidado['CC']=='') | (df_consolidado['CC'].isnull())]['ORDER_ID'].unique().tolist()
+        ordenes_no_et_en_ml = df_consolidado[(df_consolidado['fve']=='') | (df_consolidado['fve'].isnull())]['ORDER_ID'].unique().tolist()
+
         df_consolidado['comision_por_venta'] = df_consolidado['comision_por_venta']
         df_consolidado['ica'] = abs(df_consolidado['ica'])
         df_consolidado['fuente'] = abs(df_consolidado['fuente'])
         df_consolidado['iva'] = abs(df_consolidado['iva'])
 
+        df_mp_no_payment = df_consolidado[df_consolidado['ORDER_ID'].isin(df_mp_no_payment['ORDER_ID'].to_list())]
+        df_consolidado = df_consolidado[~df_consolidado['ORDER_ID'].isin(df_mp_no_payment['ORDER_ID'].to_list())]
+
+        df_no_mp_en_ml = df_consolidado[df_consolidado['ORDER_ID'].isin(ordenes_no_mp_en_ml)]
+        df_no_et_en_ml = df_consolidado[df_consolidado['ORDER_ID'].isin(ordenes_no_et_en_ml)]
+
+        df_consolidado = df_consolidado[~df_mp_reducido['ORDER_ID'].isin(ordenes_no_mp_en_ml + ordenes_no_et_en_ml)]
+        print("HEY")
         valores_enterprise = df_consolidado['valor'].sum()
         comision = df_consolidado['comision_por_venta'].sum()
         ica = df_consolidado['ica'].sum()
@@ -49,13 +70,14 @@ class ProcesamientoArchivos(BaseModel):
         resultado = df_resumen.loc[5]['D'] - df_resumen.loc[5]['C']
         df_resumen['diferencia'] = [0, 0, 0, 0, 0, resultado]
 
-        print(df_resumen)
-
-
+        #print(df_resumen)
         # Creamos un objeto ExcelWriter utilizando xlsxwriter
         writer = pd.ExcelWriter(f'{RUTA_RESULTADOS}\\consolidado_MP_ML.xlsx', engine='xlsxwriter')
         df_consolidado.to_excel(writer, sheet_name='Consolidado')
         df_resumen.to_excel(writer, sheet_name='Resumen')
+        df_mp_no_payment.to_excel(writer, sheet_name='No payment')
+        df_no_mp_en_ml.to_excel(writer, sheet_name='No registro MP en ML')
+        df_no_et_en_ml.to_excel(writer, sheet_name='No registro ET en ML')
 
         # Guardamos el archivo
         writer.close()

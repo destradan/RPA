@@ -121,7 +121,7 @@ class LecturaMercadoPago(LecturaArchivos):
 
         self.df.rename(columns={'COUPON_AMOUNT': 'cobro_por_descuento', 'MP_FEE_AMOUNT':'comision_por_venta'}, inplace=True)
         self.df["DESCRIPTION"] = self.df["DESCRIPTION"].astype('string')
-        self.df = self.df[self.df["DESCRIPTION"]!='refund']
+        #self.df = self.df[self.df["DESCRIPTION"]!='refund']
 
         self.df['comision_por_venta'] = abs(self.df['comision_por_venta'])
 
@@ -131,8 +131,11 @@ class LecturaMercadoPago(LecturaArchivos):
         ultimo_indice = pagos_en_rango.index.max()
         indice_anterior = pagos_en_rango.index[-2] if len(pagos_en_rango) >= 2 else None
 
-        self.df = self.df.loc[indice_anterior:ultimo_indice]
-        self.valor_evaluar = self.df.loc[ultimo_indice]['NET_DEBIT_AMOUNT']
+        df_rango = self.df.loc[indice_anterior:ultimo_indice]
+        self.valor_evaluar = df_rango.loc[ultimo_indice]['NET_DEBIT_AMOUNT']
+
+        listado_ordenes = df_rango['ORDER_ID'].unique().tolist()
+        self.df = self.df[self.df['ORDER_ID'].isin(listado_ordenes)]
         #self.df = self.df[self.df["DESCRIPTION"]!='refund']
         #self.df = self.df[self.df["DESCRIPTION"]!='reserve_for_refund']
         #self.df = self.df[self.df["DESCRIPTION"]!='shipping_cancel']
@@ -143,7 +146,8 @@ class LecturaMercadoPago(LecturaArchivos):
 
 
         print("#########################: ", self.valor_evaluar)
-
+        print(ultimo_indice)
+        print(indice_anterior)
 
 
         self.df['TAXES_DISAGGREGATED'] = self.df['TAXES_DISAGGREGATED'].fillna('[]')
@@ -158,6 +162,7 @@ class LecturaMercadoPago(LecturaArchivos):
         self.df['diferencias'] = np.round(abs(self.df['total_impuestos'] - self.df['TAXES_AMOUNT']), decimals=2)
 
         self.df['incongruente'] = ((self.df['TAXES_AMOUNT']>0.0) & (~self.df['DESCRIPTION'].str.contains('refund')) | (self.df['diferencias']!=0.0))
+        self.df = self.df[(~pd.isna(self.df['ORDER_ID'])) & (self.df['ORDER_ID']!='')]
         self.df.to_excel(f'{RUTA_RESULTADOS}\\MP_configurado.xlsx')
         return self.df, self.valor_evaluar
 
