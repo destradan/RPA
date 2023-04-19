@@ -1,0 +1,1 @@
+pyinstaller --windowed --collect-submodules=app --hidden-import pydantic --hidden-import tkcalendar --hidden-import babel --hidden-import babel.numbers main.py

@@ -37,13 +37,35 @@ class ProcesamientoArchivos(BaseModel):
         df_consolidado = pd.merge(df_concantenado, df_et_reducido, how='left', on='ORDER_ID')
         df_consolidado = df_consolidado.drop_duplicates(subset=['ORDER_ID'])
 
-        ordenes_no_mp_en_ml = df_consolidado[(df_consolidado['CC']=='') | (df_consolidado['CC'].isnull())]['ORDER_ID'].unique().tolist()
-        ordenes_no_et_en_ml = df_consolidado[(df_consolidado['fve']=='') | (df_consolidado['fve'].isnull())]['ORDER_ID'].unique().tolist()
-
         df_consolidado['comision_por_venta'] = df_consolidado['comision_por_venta']
         df_consolidado['ica'] = abs(df_consolidado['ica'])
         df_consolidado['fuente'] = abs(df_consolidado['fuente'])
         df_consolidado['iva'] = abs(df_consolidado['iva'])
+
+        df_consolidado['diferencia'] = df_consolidado['Ingresos por productos (COP)'] - df_consolidado['valor']
+        orden_columnas = ['ORDER_ID', 'Comprador', 'CC', 'fve', 'valor', 'diferencia', 'fecha_venta', 'Estado',
+                        'Descripción del estado', 'Paquete de varios productos', 'Unidades',
+                        'Ingresos por productos (COP)', 'Ingresos por envío (COP)',
+                        'Cargo por venta e impuestos', 'Costos de envío',
+                        'Anulaciones y reembolsos (COP)', 'Total (COP)', 'Venta por publicidad',
+                        'cobro_por_descuento', 'comision_por_venta', 'ica', 'fuente', 'iva',
+                        'SKU', '# de publicación', 'Tienda oficial',
+                        'Título de la publicación', 'Variante',
+                        'Precio unitario de venta de la publicación (COP)',
+                        'Tipo de publicación', 'Factura adjunta',
+                        'Datos personales o de empresa', 'Tipo y número de documento',
+                        'Dirección', 'Tipo de contribuyente', 'Domicilio',
+                        'Municipio o ciudad capital', 'Estado.1', 'Código postal', 'País',
+                        'Forma de entrega', 'Fecha en camino', 'Fecha entregado',
+                        'Transportista', 'Número de seguimiento', 'URL de seguimiento',
+                        'Forma de entrega.1', 'Fecha en camino.1', 'Fecha entregado.1',
+                        'Transportista.1', 'Número de seguimiento.1', 'URL de seguimiento.1',
+                        'Reclamo abierto', 'Reclamo cerrado', 'Con mediación']
+
+        df_consolidado = df_consolidado.reindex(columns=orden_columnas)
+
+        ordenes_no_mp_en_ml = df_consolidado[(df_consolidado['CC']=='') | (df_consolidado['CC'].isnull())]['ORDER_ID'].unique().tolist()
+        ordenes_no_et_en_ml = df_consolidado[(df_consolidado['fve']=='') | (df_consolidado['fve'].isnull())]['ORDER_ID'].unique().tolist()
 
         df_mp_no_payment = df_consolidado[df_consolidado['ORDER_ID'].isin(df_mp_no_payment['ORDER_ID'].to_list())]
         df_consolidado = df_consolidado[~df_consolidado['ORDER_ID'].isin(df_mp_no_payment['ORDER_ID'].to_list())]
@@ -52,7 +74,9 @@ class ProcesamientoArchivos(BaseModel):
         df_no_et_en_ml = df_consolidado[df_consolidado['ORDER_ID'].isin(ordenes_no_et_en_ml)]
 
         df_consolidado = df_consolidado[~df_mp_reducido['ORDER_ID'].isin(ordenes_no_mp_en_ml + ordenes_no_et_en_ml)]
-        print("HEY")
+
+        print(df_consolidado)
+
         valores_enterprise = df_consolidado['valor'].sum()
         comision = df_consolidado['comision_por_venta'].sum()
         ica = df_consolidado['ica'].sum()
@@ -70,7 +94,6 @@ class ProcesamientoArchivos(BaseModel):
         resultado = df_resumen.loc[5]['D'] - df_resumen.loc[5]['C']
         df_resumen['diferencia'] = [0, 0, 0, 0, 0, resultado]
 
-        #print(df_resumen)
         # Creamos un objeto ExcelWriter utilizando xlsxwriter
         writer = pd.ExcelWriter(f'{RUTA_RESULTADOS}\\consolidado_MP_ML.xlsx', engine='xlsxwriter')
         df_consolidado.to_excel(writer, sheet_name='Consolidado')
@@ -84,17 +107,20 @@ class ProcesamientoArchivos(BaseModel):
 
         return df_consolidado
 
-def ejecutar_procesamiento():
+def ejecutar_procesamiento(fecha_ini: str, fecha_fin: str):
 
     try:
-        fecha_ini = '2023-01-31'
-        fecha_fin = '2023-02-5'
-        mercado_pago, valor_evaluar = LecturaMercadoPago(errores=[]).leer_archivo()
-        mercado_libre = LecturaMercadoLibre(errores=[], fecha_inicio=fecha_ini, fecha_fin=fecha_fin).leer_archivo()
+        print("ejecutar_procesamiento fecha_ini: ", fecha_ini)
+        print("ejecutar_procesamiento fecha_fin: ", fecha_fin)
+
+        mercado_pago, valor_evaluar = LecturaMercadoPago(errores=[], fecha_inicio=fecha_ini, fecha_fin=fecha_fin).leer_archivo()
+        mercado_libre = LecturaMercadoLibre(errores=[]).leer_archivo()
         enterpirse = LecturaEnterprise(errores=[]).leer_archivo()
         print("")
         procesamiento = ProcesamientoArchivos(df_mp=mercado_pago, df_ml=mercado_libre, df_et=enterpirse, valor_evaluar=valor_evaluar)
         procesamiento.consolidado_ventas_pagos()
 
     except ValidationError as e:
+        print(e)
+    except Exception as e:
         print(e)

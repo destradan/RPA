@@ -40,14 +40,9 @@ class LecturaArchivos(BaseModel):
 
 class LecturaMercadoLibre(LecturaArchivos):
 
-    fecha_inicio: str
-    fecha_fin: str
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.archivo_correcto()
-        self.validar_fecha_inicio()
-        self.validar_fecha_fin()
 
     def archivo_correcto(self) -> Union[str, ValueError]:
         archivos_encontrados = [archivo for archivo in os.listdir(RUTA_INSUMOS) if archivo.startswith(ARCHIVO_MERCADO_LIBRE)]
@@ -58,20 +53,6 @@ class LecturaMercadoLibre(LecturaArchivos):
             raise ValueError("Hay varios archivos que hacen referencia a ventas de Mercado Libre. Debe haber solo un archvio de ventas mercado libre.")
 
         self.ruta = f'{RUTA_INSUMOS}\\{archivos_encontrados[0]}'
-
-
-
-    def validar_fecha_inicio(self) -> Union[str, ValueError]:
-        try:
-            self.fecha_inicio = pd.to_datetime(self.fecha_inicio, format='%Y-%m-%d')
-        except ValueError:
-            raise ValueError("La fecha de inicio no tiene el formato correcto. Debe ser YYYY-mm-dd")
-
-    def validar_fecha_fin(self) -> Union[str, ValueError]:
-        try:
-            self.fecha_fin = pd.to_datetime(self.fecha_fin, format='%Y-%m-%d')
-        except:
-            raise ValueError("La fecha de finalización no tiene el formato correcto. Debe ser YYYY-mm-dd")
 
     def leer_archivo(self, *args, **kwargs) -> pd.DataFrame:
         self.df = pd.read_excel(self.ruta,  dtype={'# de venta':str}, skiprows=2)
@@ -92,13 +73,28 @@ class LecturaMercadoLibre(LecturaArchivos):
         return self.df
 
 class LecturaMercadoPago(LecturaArchivos):
-
+    fecha_inicio: str
+    fecha_fin: str
     valor_evaluar: Optional[float]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
+        self.validar_fecha_inicio()
+        self.validar_fecha_fin()
         self.archivo_correcto()
+
+    def validar_fecha_inicio(self) -> Union[str, ValueError]:
+        try:
+            self.fecha_inicio = pd.to_datetime(f'{self.fecha_inicio}T00:00:00', format='%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            raise ValueError("La fecha de inicio no tiene el formato correcto. Debe ser YYYY-mm-dd")
+
+    def validar_fecha_fin(self) -> Union[str, ValueError]:
+        try:
+            self.fecha_fin = pd.to_datetime(f'{self.fecha_fin}T23:59:59', format='%Y-%m-%dT%H:%M:%S')
+        except:
+            raise ValueError("La fecha de finalización no tiene el formato correcto. Debe ser YYYY-mm-dd")
 
     def archivo_correcto(self) -> Union[str, ValueError]:
         archivos_encontrados = [archivo for archivo in os.listdir(RUTA_INSUMOS) if archivo.startswith(ARCHIVO_MERCADO_PAGO)]
@@ -114,10 +110,18 @@ class LecturaMercadoPago(LecturaArchivos):
         return self.df['TAXES_DISAGGREGATED'].apply(lambda x: sum([d['amount'] for d in x if 'financial_entity' in d.keys() and d['financial_entity'] == tax_type]))
 
     def leer_archivo(self) -> tuple[pd.DataFrame, float]:
+        print('LecturaMercadoPago fecha_inicio: ', self.fecha_inicio)
+        print('LecturaMercadoPago fecha_fin: ', self.fecha_fin)
         self.df = pd.read_excel(self.ruta, dtype={'ORDER_ID':str})
         self.df['ORDER_ID'] = self.df['ORDER_ID'].str.strip()
         self.df['ORDER_ID'] = self.df['ORDER_ID'].fillna('')
-        #self.df = self.df[self.df['ORDER_ID']!='']
+
+
+        self.df["RELEASE_DATE"]=self.df["RELEASE_DATE"].astype('string')
+        self.df['RELEASE_DATE'] = pd.to_datetime(self.df['RELEASE_DATE'], format='%Y-%m-%dT%H:%M:%S.%f%z').dt.tz_localize(None)
+
+        self.df = self.df[(self.df['RELEASE_DATE']<=self.fecha_fin)]
+        #self.df = self.df[(self.df['RELEASE_DATE']>=self.fecha_inicio) & (self.df['RELEASE_DATE']<=self.fecha_fin)]
 
         self.df.rename(columns={'COUPON_AMOUNT': 'cobro_por_descuento', 'MP_FEE_AMOUNT':'comision_por_venta'}, inplace=True)
         self.df["DESCRIPTION"] = self.df["DESCRIPTION"].astype('string')
@@ -128,8 +132,13 @@ class LecturaMercadoPago(LecturaArchivos):
         self.df = self.df[:-1]
 
         pagos_en_rango = self.df.loc[self.df['DESCRIPTION'] == 'payout']
+        print("################### pagos_en_rango #####################")
+        print(pagos_en_rango)
         ultimo_indice = pagos_en_rango.index.max()
         indice_anterior = pagos_en_rango.index[-2] if len(pagos_en_rango) >= 2 else None
+
+        print("FECHA_INICIO: ", self.df.loc[indice_anterior]['RELEASE_DATE'])
+        print("FECHA_FIN: ", self.df.loc[ultimo_indice]['RELEASE_DATE'])
 
         df_rango = self.df.loc[indice_anterior:ultimo_indice]
         self.valor_evaluar = df_rango.loc[ultimo_indice]['NET_DEBIT_AMOUNT']

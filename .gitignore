@@ -8,6 +8,11 @@ config.json
 app/insumos/*
 app/resultados/*
 documentacion/*
+New folder/*
+build/*
+dist/*
+main.spec
+setup.py
 rta/*
 
 Informacion.txt
