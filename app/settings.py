@@ -13,7 +13,6 @@ if variables_ambiente['RUTA_RESULTADOS'] == "":
 else:
     RUTA_RESULTADOS = variables_ambiente['RUTA_RESULTADOS']
 
-print(RUTA_RESULTADOS)
 ARCHIVO_MERCADO_LIBRE = variables_ambiente['ARCHIVO_MERCADO_LIBRE']
 ARCHIVO_MERCADO_PAGO = variables_ambiente['ARCHIVO_MERCADO_PAGO']
 ARCHIVO_ENTERPRISE = variables_ambiente['ARCHIVO_ENTERPRISE']
